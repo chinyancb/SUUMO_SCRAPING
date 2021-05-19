@@ -1,5 +1,7 @@
 import requests
 import lxml.html
+import urllib.request
+from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 from pymongo import MongoClient
 
@@ -28,24 +30,29 @@ def main():
     
     # 詳細ページのリンクを取得
     elem_detail_url_array = root.xpath('//a[@class="js-cassetLinkHref"]')
+
+    # 詳細ページをスクレイピング
     for i in range(0, len(elem_detail_url_array)):
-        print(elem_detail_url_array[i].text)
+        detail_data = {} 
+        # 物件名
+        building_name = elem_detail_url_array[i].text
         url = urljoin(BASE_ULR, elem_detail_url_array[i].get('href'))
-        detail_data = detail_page_scraping(url)
-        print(url)
+        detail_data['building_name'] = building_name
+        detail_data['url'] = url
+        detail_data = detail_page_scraping(url, detail_data=detail_data)
         print(detail_data)
         
 
 
 
-def detail_page_scraping(url):
+def detail_page_scraping(url, detail_data):
+
+    # 詳細ページ取得
     response = requests.get(url)
     root = lxml.html.fromstring(response.content)
 
-    detail_data = {}
     # 賃料
     rant = root.xpath('//*[@class="property_view_main-emphasis"]')[0].text.split('\t')[-1]
-
     detail_data["賃料"] = rant
     
     # 管理費・共益費から築年数までをスクレイピング
@@ -87,6 +94,42 @@ def detail_page_scraping(url):
     value = root.xpath('//*[@class="property_view_detail-text"]')[-1].text.split('\t')[-1]
     detail_data[key] = value
 
+    # 部屋の特徴・設備
+    key = root.xpath('//*[@id="contents"]/h2/span')[0].text
+    value = root.xpath('//*[@id="bkdt-option"]//*/li')[0].text
+    detail_data[key] = value
+
+    # 物件概要
+    key = root.xpath('//*[@id="contents"]/h2/span')[1].text
+
+    # 物件概要(htmlがtableなのでBeautifulSoupを使用する)
+    html = urllib.request.urlopen(url)
+    soup = BeautifulSoup(html, "lxml")
+
+
+    # tableの要素をkey, valueの配列として作成
+    table = soup.find("table", class_="data_table table_gaiyou")
+    key_array = []
+    value_array = []
+    detail_data_tmp = {}
+    for row in table.find_all("tr"):
+
+        # tableにthタグがなかった箇所があるためNoneで暫定対応
+        if row.find("th") == None:
+            continue
+        key_array.append(row.find("th").text)
+        value_array.append(row.find("td").text.split('\t')[-1])
+
+    else:
+        # 物件概要の詳細データをdict型で作成
+        for i in range(0, len(key_array)):
+            detail_data_tmp[key_array[i]] = value_array[i]
+
+    # 物件概要の詳細をリストとして作成し全体のdictに登録
+    detail_data_tmp2 = []
+    detail_data_tmp2.append(detail_data_tmp)
+
+    detail_data[key] = detail_data_tmp2
 
     return detail_data
 
