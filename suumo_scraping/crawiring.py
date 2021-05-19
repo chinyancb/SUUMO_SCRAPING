@@ -1,6 +1,9 @@
+import sys
 import requests
 import lxml.html
 import urllib.request
+import time
+import numpy as np
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 from pymongo import MongoClient
@@ -14,35 +17,55 @@ SAKULASHIMACHI_URL = 'https://suumo.jp/jj/chintai/ichiran/FR301FC005/?gclid=CjwK
 
 
 
-"""
-client =  MongoClient("mongodb://127.0.0.1:27017", username='pyuser', password='ellegarden', authSource='mydb')
-db = client.mydb
-collection = db.suumo
-collection.insert_one({'test': 'test2'})
-client.close()
-"""
 
 
-def main():
+def main(page=1):
     
-    response = requests.get(SAKULASHIMACHI_URL)
-    root = lxml.html.fromstring(response.content)
-    
-    # 詳細ページのリンクを取得
-    elem_detail_url_array = root.xpath('//a[@class="js-cassetLinkHref"]')
+    # ページが155ページあるため事前にクエリパラメータを作っておく(デフォルトは1ページから)
+    PAGE_RANGE = np.arange(int(page), 156, 1)
+    QUERY = '&page='
 
-    # 詳細ページをスクレイピング
-    for i in range(0, len(elem_detail_url_array)):
-        detail_data = {} 
-        # 物件名
-        building_name = elem_detail_url_array[i].text
-        url = urljoin(BASE_ULR, elem_detail_url_array[i].get('href'))
-        detail_data['building_name'] = building_name
-        detail_data['url'] = url
-        detail_data = detail_page_scraping(url, detail_data=detail_data)
-        print(detail_data)
+    # mongodb接続
+    client, collection = connect_mongodb()
+
+    for j in PAGE_RANGE:
+
+        response = requests.get(SAKULASHIMACHI_URL + QUERY + str(j))
+        root = lxml.html.fromstring(response.content)
+        
+        # 詳細ページのリンクを取得
+        elem_detail_url_array = root.xpath('//a[@class="js-cassetLinkHref"]')
+
+        # 詳細ページをスクレイピング
+        for i in range(0, len(elem_detail_url_array)):
+
+            detail_data = {} 
+
+            # 物件名
+            building_name = elem_detail_url_array[i].text
+            url = urljoin(BASE_ULR, elem_detail_url_array[i].get('href'))
+            detail_data['building_name'] = building_name
+            detail_data['url'] = url
+            detail_data = detail_page_scraping(url, detail_data=detail_data)
+
+            # mongodbへ格納
+            collection.insert_one(detail_data)
+            print(f'j:{j}, i:{i},| {building_name} | {url}')
+
+            # スリープ
+            time.sleep(1)
+
         
 
+    client.close()
+
+
+
+def connect_mongodb():
+    client =  MongoClient("mongodb://127.0.0.1:27017", username='pyuser', password='ellegarden', authSource='mydb')
+    db = client.mydb
+    collection = db.suumo
+    return client, collection
 
 
 def detail_page_scraping(url, detail_data):
@@ -139,4 +162,7 @@ def detail_page_scraping(url, detail_data):
 
 
 if __name__ == '__main__':
-    main()
+    if len(sys.argv) > 1:
+        main(page=sys.argv[1])
+    else:
+        main()
