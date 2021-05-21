@@ -1,4 +1,5 @@
 import re
+import pandas as pd
 from pymongo import MongoClient
 from pymongo import DESCENDING
 from pymongo import ASCENDING
@@ -9,8 +10,6 @@ def main():
 
     client =  MongoClient("mongodb://127.0.0.1:27017", username='pyuser', password='ellegarden', authSource='mydb')
     db = client.mydb
-    # 加工したデータを格納するコレクション
-    collection_ana = db.suumo_ana
 
     # documentのkeyを取得
     doc_keys = list(db.suumo.find_one().keys())
@@ -29,13 +28,24 @@ def main():
 
 
     # メイン処理
-    for doc in db.suumo.find().limit(1):
+    loop_cnt = 0
+    for doc in db.suumo.find():
         document_data = {}
         document_data = data_treat(doc, document_data, doc_keys)
         document_data = access_data_treat(doc, document_data)
         document_data = room_feat_data_treat(doc, document_data, feature_list=b_feature_array)
+        document_data = room_overview_data_treat(doc, document_data)
+#        print(document_data)
 
-    print(document_data)
+        # pandasとして読み込み
+        df = pd.DataFrame.from_dict(document_data, orient='index').T
+        if loop_cnt == 0:
+            df.to_csv('./var/suumo.csv', header=True)
+        else:
+            df.to_csv('./var/suumo.csv', mode='a', header=False)
+
+        loop_cnt += 1
+        print(loop_cnt)
 
 
 # ネストしていないものはそのまま格納
@@ -71,6 +81,13 @@ def room_feat_data_treat(doc, document_data, feature_list):
             document_data[feat] = 0
 
     return document_data
+
+
+# 物件概要
+def room_overview_data_treat(doc, document_data):
+
+    return document_data | doc['物件概要'][0]
+
 
 
 
