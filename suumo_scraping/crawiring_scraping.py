@@ -12,21 +12,21 @@ from pymongo import MongoClient
 BASE_ULR = 'https://suumo.jp'
 
 # 桜新町ので検索結果ページのURL
-SAKULASHIMACHI_URL = 'https://suumo.jp/jj/chintai/ichiran/FR301FC005/?gclid=CjwKCAjwqIiFBhAHEiwANg9sziL7fKlU8DAVWubuiq52Fkns-Mm_mLmoJiWmfdYIXvQ3eb76GpC-HxoCNS0QAvD_BwE&rn=0230&bs=040&gclsrc=aw.ds&ipao9739=&ra=013&ipao9738=&ipao9731=&ipao9730=&ipao9733=&vos=op4014adwstw012000000zzz_01x0000000-xe_kwd-302722255670:cr-355846349919:sl-:adg-99960440636:dev-c:acc-4461499012:cam-9789266115&ipao9732=2259732283885045897&ipao9735=&ipao9734=&ipao9737=&ipao9736=&ipao9723=99960440636&ipao9724=1009307&ipao9725=1009307&ipao9726=&ipao9740=&ar=030&ipao9727=&ipao9728=&ipao9729=&ek=023016140&ipao9741=&et=15'
+SAKULASHIMACHI_URL = 'https://suumo.jp/jj/chintai/ichiran/FR301FC005/?shkr1=03&cb=0.0&shkr3=03&rn=0230&shkr2=03&mt=9999999&ar=030&bs=040&shkr4=03&ct=9999999&ra=013&srch_navi=1&cn=9999999&ek=023017640&ek=023002000&ek=023016720&ek=023015340&ek=023016140&ek=023040800&ek=023034230&ek=023034220&ek=023022390&ek=023036850&mb=0&fw2=&et=9999999&ae=02301'
 
 
 
 
 
 
-def main(page=1):
+def main(collection_name, page_start, page_end):
     
-    # ページが155ページあるため事前にクエリパラメータを作っておく(デフォルトは1ページから)
-    PAGE_RANGE = np.arange(int(page), 156, 1)
+    # ページのパラメータクエリ作成　
+    PAGE_RANGE = np.arange(int(page_start), int(page_end) + 1, 1)
     QUERY = '&page='
 
     # mongodb接続
-    client, collection = connect_mongodb()
+    client, collection = connect_mongodb(collection_name)
 
     for j in PAGE_RANGE:
 
@@ -61,10 +61,11 @@ def main(page=1):
 
 
 
-def connect_mongodb():
+def connect_mongodb(collection_name):
     client =  MongoClient("mongodb://127.0.0.1:27017", username='pyuser', password='ellegarden', authSource='mydb')
     db = client.mydb
-    collection = db.suumo
+    #collection = db.suumo
+    collection = db[f'{collection_name}']
     return client, collection
 
 
@@ -163,6 +164,10 @@ def detail_page_scraping(url, detail_data):
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
-        main(page=sys.argv[1])
+        collection_name = sys.argv[1]
+        page_start = sys.argv[2]
+        page_end   = sys.argv[3]
+        main(collection_name, page_start, page_end)
     else:
-        main()
+        print('arugment error')
+        sys.exit(1)
