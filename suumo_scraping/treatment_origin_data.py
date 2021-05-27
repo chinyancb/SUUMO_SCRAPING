@@ -1,3 +1,4 @@
+import sys
 import re
 import pandas as pd
 from pymongo import MongoClient
@@ -6,13 +7,15 @@ from pymongo import ASCENDING
 
 
 
-def main():
+def main(collection, outputfilename):
 
     client =  MongoClient("mongodb://127.0.0.1:27017", username='pyuser', password='ellegarden', authSource='mydb')
     db = client.mydb
+    collection = db[collection]
+    print(collection)
 
     # documentのkeyを取得
-    doc_keys = list(db.suumo.find_one().keys())
+    doc_keys = list(collection.find_one().keys())
 
     # ネストしてるkeyは別途処理するため除外
     doc_keys.remove('アクセス')
@@ -21,7 +24,7 @@ def main():
 
     # 部屋の特徴・設備のvalueを全て取り出し、uniqueにする
     b_feature_array = []
-    for doc in db.suumo.find():
+    for doc in collection.find():
         b_feature_array_tmp = doc["部屋の特徴・設備"].split('、')
         b_feature_array.extend(b_feature_array_tmp)
     b_feature_array = list(set(b_feature_array))
@@ -29,7 +32,7 @@ def main():
 
     # メイン処理
     loop_cnt = 0
-    for doc in db.suumo.find():
+    for doc in collection.find():
         document_data = {}
         document_data = data_treat(doc, document_data, doc_keys)
         document_data = access_data_treat(doc, document_data)
@@ -37,12 +40,12 @@ def main():
         document_data = room_overview_data_treat(doc, document_data)
 #        print(document_data)
 
-        # pandasとして読み込み
+        # pandasとして読み込みしcsvで出力
         df = pd.DataFrame.from_dict(document_data, orient='index').T
         if loop_cnt == 0:
-            df.to_csv('./var/suumo.csv', header=True)
+            df.to_csv(f'./var/{outputfilename}.csv', header=True)
         else:
-            df.to_csv('./var/suumo.csv', mode='a', header=False)
+            df.to_csv(f'./var/{outputfilename}.csv', mode='a', header=False)
 
         loop_cnt += 1
         print(loop_cnt)
@@ -61,11 +64,17 @@ def data_treat(doc, document_data, doc_keys):
 # アクセス
 def access_data_treat(doc, document_data):
 
+    # 最寄り駅数
     document_data['最寄り駅数'] = len(doc['アクセス'])
+
+    # 最寄り駅から徒歩何分か
+    cnt = 1
     for s in doc['アクセス']:
-        result = re.match('.+桜新町駅.+分', s)
+        result = re.match('.+駅.+分', s)
         if result != None:
-            document_data['アクセス'] = result.group()
+            key = '最寄り駅' + '_' + str(cnt)
+            document_data[key] = result.group()
+        cnt += 1
 
     return document_data
 
@@ -93,4 +102,10 @@ def room_overview_data_treat(doc, document_data):
 
 
 if __name__ == '__main__':
-    main()
+    if len(sys.argv) == 1:
+        print('argument error. : <collection>, <outputfilname>')
+        sys.exit(1)
+
+    collection = sys.argv[1]
+    outputfilename = sys.argv[2]
+    main(collection, outputfilename)

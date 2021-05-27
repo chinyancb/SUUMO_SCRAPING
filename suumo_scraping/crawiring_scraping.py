@@ -19,44 +19,56 @@ SAKULASHIMACHI_URL = 'https://suumo.jp/jj/chintai/ichiran/FR301FC005/?shkr1=03&c
 
 
 
-def main(collection_name, page_start, page_end):
+def main(collection_name,  page_end):
     
     # ページのパラメータクエリ作成　
-    PAGE_RANGE = np.arange(int(page_start), int(page_end) + 1, 1)
     QUERY = '&page='
 
     # mongodb接続
     client, collection = connect_mongodb(collection_name)
 
-    for j in PAGE_RANGE:
+    j = 0
+    while j <= int(page_end):
 
-        response = requests.get(SAKULASHIMACHI_URL + QUERY + str(j))
-        root = lxml.html.fromstring(response.content)
-        
-        # 詳細ページのリンクを取得
-        elem_detail_url_array = root.xpath('//a[@class="js-cassetLinkHref"]')
+        try:
 
-        # 詳細ページをスクレイピング
-        for i in range(0, len(elem_detail_url_array)):
+            response = requests.get(SAKULASHIMACHI_URL + QUERY + str(j))
+            root = lxml.html.fromstring(response.content)
+            
+            # 詳細ページのリンクを取得
+            elem_detail_url_array = root.xpath('//a[@class="js-cassetLinkHref"]')
 
-            detail_data = {} 
+            # 詳細ページをスクレイピング
+            for i in range(0, len(elem_detail_url_array)):
 
-            # 物件名
-            building_name = elem_detail_url_array[i].text
-            url = urljoin(BASE_ULR, elem_detail_url_array[i].get('href'))
-            detail_data['building_name'] = building_name
-            detail_data['url'] = url
-            detail_data = detail_page_scraping(url, detail_data=detail_data)
+                detail_data = {} 
 
-            # mongodbへ格納
-            collection.insert_one(detail_data)
-            print(f'j:{j}, i:{i},| {building_name} | {url}')
+                # 物件名
+                building_name = elem_detail_url_array[i].text
+                url = urljoin(BASE_ULR, elem_detail_url_array[i].get('href'))
+                detail_data['building_name'] = building_name
+                detail_data['url'] = url
+                detail_data = detail_page_scraping(url, detail_data=detail_data)
 
-            # スリープ
-            time.sleep(1)
+                # mongodbへ格納
+                collection.insert_one(detail_data)
+                print(f'j:{j}, i:{i},| {building_name} | {url}')
 
-        
+                # スリープ
+                time.sleep(1)
+            else:
+                j += 1
+        except KeyboardInterrupt as e:
+            client.close()
+            sys.exit(1)
+        except Exception as e:
+            client.close()
+            print('sleep 120 sec.')
+            time.sleep(120)
+            client, collection = connect_mongodb(collection_name)
+            continue
 
+    print('done')
     client.close()
 
 
@@ -165,9 +177,8 @@ def detail_page_scraping(url, detail_data):
 if __name__ == '__main__':
     if len(sys.argv) > 1:
         collection_name = sys.argv[1]
-        page_start = sys.argv[2]
-        page_end   = sys.argv[3]
-        main(collection_name, page_start, page_end)
+        page_end   = sys.argv[2]
+        main(collection_name,  page_end)
     else:
         print('arugment error')
         sys.exit(1)
